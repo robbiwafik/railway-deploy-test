@@ -10,9 +10,10 @@ ALLOWED_HOSTS = ['*']
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'siakad',
-        'HOST': '127.0.0.1',
+        'NAME': 'railway',
+        'HOST': 'containers-us-west-148.railway.app',
         'USER': 'root',
-        'PASSWORD': 'coutpassrootendl;'
+        'PORT': '5463',
+        'PASSWORD': 'iUHGIxa4YBJblokWiqHO'
     }
 }
