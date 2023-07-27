@@ -147,3 +147,4 @@ SIMPLE_JWT = {
 LANGUAGE_CODE = 'id'
 
 CORS_ALLOW_ALL_ORIGINS = True
+CSRF_TRUSTED_ORIGINS = ['https://web-production-bfa4.up.railway.app']
