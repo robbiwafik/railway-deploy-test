@@ -3,6 +3,18 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 
 
+class Kurikulum(models.Model):
+    kode = models.CharField(max_length=10, unique=True)
+    nama = models.CharField(max_length=255)
+    tanggal_digunakan = models.DateField()
+
+    def __str__(self) -> str:
+        return self.nama
+
+    class Meta:
+        verbose_name_plural = 'Kurikulum'
+
+
 class Jurusan(models.Model):
     nama = models.CharField(max_length=255)
 
@@ -81,6 +93,7 @@ class ProgramStudi(models.Model):
     no_sk = models.CharField(max_length=12)
     tanggal_sk = models.DateField()
     tahun_operasional = models.PositiveIntegerField(validators=[MinValueValidator(2000), MaxValueValidator(3000)])
+    akreditasi = models.CharField(max_length=2, null=True)
 	
     def __str__(self) -> str:
         return self.nama
@@ -122,6 +135,7 @@ class Dosen(models.Model):
     gelar = models.CharField(max_length=20)
     prodi = models.ForeignKey(ProgramStudi, on_delete=models.PROTECT)
     foto_profil = models.ImageField(null=True, blank=True, upload_to='academic/images/')
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True)
 
     def __str__(self) -> str:
         return self.nama
@@ -133,10 +147,16 @@ class Dosen(models.Model):
 class Kelas(models.Model):
     huruf = models.CharField(max_length=1)
     prodi = models.ForeignKey(ProgramStudi, on_delete=models.PROTECT, related_name='kelas_list')
-    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name="kelas_list")
+    semester = models.ForeignKey(Semester, on_delete=models.PROTECT, related_name='kelas_list')
+    kurikulum = models.ForeignKey(Kurikulum, on_delete=models.PROTECT, related_name='kelas_list', null=True)
+
+    def nama_kurikulum(self):
+        if (self.kurikulum):
+            return self.kurikulum.nama
+        return self.kurikulum
 
     def __str__(self) -> str:
-        return f"{self.prodi} {self.semester} {self.huruf}"
+        return f'{self.prodi} {self.semester} {self.huruf}'
     
     class Meta:
         verbose_name_plural = 'Kelas'
@@ -164,6 +184,9 @@ class Mahasiswa(models.Model):
     
     def email(self):
         return self.user.email
+    
+    def username(self):
+        return self.user.username
 
     class Meta:
         verbose_name_plural = 'Mahasiswa'
@@ -174,7 +197,7 @@ class Ruangan(models.Model):
     gedung = models.ForeignKey(GedungKuliah, on_delete=models.CASCADE)
 
     def __str__(self) -> str:
-        return self.nama
+        return f'{self.gedung.nama} {self.nama}'
 
     class Meta:
         verbose_name_plural = 'Ruangan'
@@ -191,13 +214,15 @@ class AduanRuangan(models.Model):
     status = models.CharField(max_length=1, choices=STATUS_CHOICES, default=STATUS_BELUM_DIBACA)
     foto = models.ImageField(null=True, upload_to='academic/images/')
     ruangan = models.ForeignKey(Ruangan, on_delete=models.CASCADE)
+    tanggapan = models.TextField(null=True)
+    mahasiswa = models.ForeignKey(Mahasiswa, on_delete=models.SET_NULL, null=True)
 
     class Meta:
         verbose_name_plural = 'Aduan Ruangan'
     
 
 class PemberitahuanProdi(models.Model):
-    pemberitahuan = models.ForeignKey(Pemberitahuan, on_delete=models.CASCADE, related_name="filter_prodi")
+    pemberitahuan = models.ForeignKey(Pemberitahuan, on_delete=models.CASCADE, related_name='filter_prodi')
     prodi = models.ForeignKey(ProgramStudi, on_delete=models.CASCADE, related_name='pemberitahuan_list')
 
 
@@ -239,6 +264,11 @@ class KaryaIlmiah(models.Model):
 class Jadwal(models.Model):
     kelas = models.OneToOneField(Kelas, on_delete=models.CASCADE, related_name='jadwal_list')
 
+    def nama_kurikulum(self):
+        if (self.kelas.kurikulum):
+            return self.kelas.kurikulum.nama
+        return self.kelas.kurikulum
+
     def __str__(self) -> str:
         return f'{self.kelas}'
     
@@ -249,9 +279,16 @@ class Jadwal(models.Model):
 class MataKuliah(models.Model):
     kode = models.CharField(max_length=255, unique=True)
     nama = models.CharField(max_length=255)
-    jumlah_teori = models.PositiveSmallIntegerField()
-    jumlah_pratikum = models.PositiveSmallIntegerField()
+    jumlah_sks_teori = models.PositiveSmallIntegerField()
+    jumlah_sks_praktik = models.PositiveSmallIntegerField()
     program_studi = models.ForeignKey(ProgramStudi, on_delete=models.CASCADE, related_name='list_makul')
+    semester = models.PositiveSmallIntegerField(null=True)
+    kurikulum = models.ForeignKey(Kurikulum, on_delete=models.PROTECT, related_name='list_makul', null=True)
+
+    def nama_kurikulum(self):
+        if self.kurikulum:
+            return self.kurikulum.nama
+        return None
 
     def __str__(self) -> str:
         return self.nama
@@ -278,13 +315,15 @@ class JadwalMakul(models.Model):
     jam_selesai = models.TimeField()
     hari = models.CharField(max_length=2, choices=HARI_CHOICES, default=HARI_SENIN)
     jadwal = models.ForeignKey(Jadwal, on_delete=models.CASCADE, related_name='makul_list')
-    dosen = models.ForeignKey(Dosen, on_delete=models.PROTECT, null=True, related_name='makul_ajar') # remove null=True and rename later
+    dosen = models.ForeignKey(Dosen, on_delete=models.CASCADE, null=True, related_name='makul_ajar')
     ruangan = models.ForeignKey(Ruangan, on_delete=models.PROTECT)
     mata_kuliah = models.ForeignKey(MataKuliah, on_delete=models.CASCADE)
+
+    def __str__(self) -> str:
+        return f'{self.jadwal.kelas.prodi} {self.jadwal.kelas.semester} {self.jadwal.kelas.huruf} {self.mata_kuliah.nama}'
     
     class Meta:
         verbose_name_plural = ''
-        unique_together = ['jam_mulai', 'jam_selesai', 'hari', 'ruangan']
 
 
 class KHS(models.Model):
@@ -309,10 +348,46 @@ class KHS(models.Model):
 class NilaiKHS(models.Model):
     angka_mutu = models.IntegerField(validators=[MaxValueValidator(4)])
     huruf_mutu = models.CharField(max_length=1)
-    nilai = models.PositiveIntegerField(validators=[MinValueValidator(1), MaxValueValidator(100)])
+    nilai = models.DecimalField(validators=[MinValueValidator(1), MaxValueValidator(100)], max_digits=6, decimal_places=2)
     khs = models.ForeignKey(KHS, on_delete=models.CASCADE, related_name='nilai_list')
     mata_kuliah = models.ForeignKey(MataKuliah, on_delete=models.PROTECT)
 
     class Meta:
         unique_together = ['mata_kuliah', 'khs']
+        verbose_name_plural = 'Nilai KHS'
 
+
+class KetuaJurusan(models.Model):
+    nomor_induk = models.CharField(max_length=25, unique=True)
+    nama = models.CharField(max_length=255)
+    gelar = models.CharField(max_length=20)
+    jurusan = models.ForeignKey(Jurusan, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name_plural = 'Ketua Jurusan'
+
+
+class KoordinatorProgramStudi(models.Model):
+    nomor_induk = models.CharField(max_length=25, unique=True)
+    nama = models.CharField(max_length=255)
+    gelar = models.CharField(max_length=20)
+    program_studi = models.ForeignKey(ProgramStudi, on_delete=models.CASCADE)
+
+    class Meta:
+        verbose_name_plural = 'Koordinator Program Studi'
+
+
+class Materi(models.Model):
+    judul = models.CharField(max_length=255)
+    deskripsi = models.TextField()
+    tanggal_unggah = models.DateTimeField(auto_now_add=True)
+    file = models.FileField(null=True, blank=True, upload_to='academic/files/')
+    jadwal_makul = models.ForeignKey(JadwalMakul, on_delete=models.CASCADE)
+
+    def kelas(self):
+        return self.jadwal_makul
+
+    class Meta:
+        verbose_name_plural = 'Materi'
+
+    

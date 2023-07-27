@@ -42,7 +42,7 @@ class ProgramStudiSerializer(serializers.ModelSerializer):
         model = models.ProgramStudi
         fields = ['kode', 'nama', 'no_sk', 
                   'tanggal_sk', 'tahun_operasional', 'jurusan', 
-                  'program_pendidikan']
+                  'program_pendidikan', 'akreditasi']
 
 
 class SimpleProgramStudiSerializer(serializers.ModelSerializer):
@@ -72,11 +72,56 @@ class CreateUpdateStaffProdiSerializer(serializers.ModelSerializer):
         fields = ['no_induk', 'no_hp', 'prodi', 'user']
 
 
-class DosenSerializer(serializers.ModelSerializer):
+class SimpleMataKuliahSerializer(serializers.ModelSerializer):
+    sks = serializers.SerializerMethodField()
+
+    def get_sks(self, mata_kuliah:models.MataKuliah):
+        return mata_kuliah.jumlah_sks_teori + mata_kuliah.jumlah_sks_praktik
+        
+    class Meta:
+        model = models.MataKuliah
+        fields = ['kode', 'nama', 'sks']
+
+
+class SimpleKelasSerializer(serializers.ModelSerializer):
     prodi = SimpleProgramStudiSerializer()
     class Meta:
+        model = models.Kelas
+        fields = ['id', 'prodi', 'semester', 'huruf']
+
+
+class SimpleJadwalSerializer(serializers.ModelSerializer):
+    semester = serializers.SerializerMethodField()
+
+    def get_semester(self, jadwal):
+        return jadwal.kelas.semester.no
+
+    class Meta:
+        model = models.Jadwal
+        fields = ['id', 'semester']
+
+
+class DosenJadwalMakulSerializer(serializers.ModelSerializer):
+    jadwal = SimpleJadwalSerializer()
+    mata_kuliah = SimpleMataKuliahSerializer()
+    nama_hari = serializers.CharField(source='get_hari_display',  read_only=True)
+    ruangan = serializers.SerializerMethodField()
+
+    def get_ruangan(self, jadwalMakul: models.JadwalMakul):
+        return {'nama': jadwalMakul.ruangan.nama, 'gedung': jadwalMakul.ruangan.gedung.nama}
+
+    class Meta:
+        model = models.JadwalMakul
+        fields = ['id', 'jam_mulai', 'jam_selesai', 'nama_hari', 'ruangan', 'mata_kuliah', 'jadwal']
+
+
+class DosenSerializer(serializers.ModelSerializer):
+    prodi = SimpleProgramStudiSerializer()
+    makul_ajar = DosenJadwalMakulSerializer(many=True)
+    
+    class Meta:
         model = models.Dosen
-        fields = ['nip', 'nama', 'email', 'no_hp', 'gelar', 'prodi']
+        fields = ['nip', 'nama', 'email', 'no_hp', 'gelar', 'prodi', 'foto_profil', 'makul_ajar']
 
 
 class SimpleDosenSerializer(serializers.ModelSerializer):
@@ -98,13 +143,6 @@ class KelasSerializer(serializers.ModelSerializer):
         fields = ['id', 'huruf', 'prodi', 'semester']
 
 
-class SimpleKelasSerializer(serializers.ModelSerializer):
-    prodi = SimpleProgramStudiSerializer()
-    class Meta:
-        model = models.Kelas
-        fields = ['id', 'prodi', 'semester', 'huruf']
-
-
 class CreateUpdateKelasSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Kelas
@@ -114,10 +152,11 @@ class CreateUpdateKelasSerializer(serializers.ModelSerializer):
 class MahasiswaSerializer(serializers.ModelSerializer):
     kelas = KelasSerializer()
     pembimbing_akademik = SimpleDosenSerializer()
+
     class Meta:
         model = models.Mahasiswa
-        fields = ['nim', 'nama_depan', 'nama_belakang', 
-                  'email', 'tanggal_lahir', 'alamat', 
+        fields = ['nim', 'nama_depan', 'nama_belakang', 'username',
+                  'email', 'tahun_angkatan', 'tanggal_lahir', 'alamat', 
                   'no_hp', 'foto_profil', 'pembimbing_akademik', 
                   'kelas']
 
@@ -127,28 +166,30 @@ class SimpleMahasiswaSerializer(serializers.ModelSerializer):
 
     def get_nama(self, mahasiswa: models.Mahasiswa):
         return f"{mahasiswa.user.first_name} {mahasiswa.user.last_name}"
+    
     class Meta:
         model = models.Mahasiswa
-        fields = ['nim', 'nama']
+        fields = ['nim', 'nama', 'foto_profil']
 
 
 class CreateUpdateMahasiswaSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.Mahasiswa
-        fields = ['nim', 'email', 'tanggal_lahir', 
+        fields = ['tanggal_lahir', 'tahun_angkatan',
                   'alamat', 'no_hp', 'foto_profil', 
                   'pembimbing_akademik', 'kelas', 'user']
 
 
 class AduanRuanganSerializer(serializers.ModelSerializer):
-    def create(self, validated_data):
-        return models.AduanRuangan.objects.create(ruangan_id=self.context['ruangan_id'], **validated_data)
     class Meta:
         model = models.AduanRuangan
-        fields = ['id', 'status', 'detail', 'foto']
+        fields = ['id', 'status', 'detail', 'foto', 'ruangan', 'tanggapan', 'mahasiswa']
 
 
 class CreateAduanRuanganSerializer(serializers.ModelSerializer):
+    def create(self, validated_data):
+        return models.AduanRuangan.objects.create(ruangan_id=self.context['ruangan_id'], **validated_data)
+    
     class Meta:
         model = models.AduanRuangan
         fields = ['id', 'detail', 'foto']
@@ -224,29 +265,27 @@ class KaryaIlmiahSerializer(serializers.ModelSerializer):
 
 
 class CreateUpdateKaryaIlmiahSerializer(serializers.ModelSerializer):
+    nim = serializers.CharField(write_only=True)
+
+    def create(self, validated_data):
+        nim = validated_data.pop('nim')
+        validated_data['mahasiswa'] = models.Mahasiswa.objects.filter(nim=nim).first()
+        validated_data['prodi'] = validated_data['mahasiswa'].kelas.prodi
+
+        return super().create(validated_data)
+
     class Meta:
         model = models.KaryaIlmiah
         fields = ['id', 'judul', 'abstrak',
                   'link_versi_full', 'tipe', 'file_preview', 
-                  'prodi', 'mahasiswa']
+                  'nim']
 
 
 class MataKuliahSerializer(serializers.ModelSerializer):
     class Meta:
         model = models.MataKuliah
-        fields = ['kode', 'nama', 'jumlah_teori', 
-                  'jumlah_pratikum']
-    
-
-class SimpleMataKuliahSerializer(serializers.ModelSerializer):
-    sks = serializers.SerializerMethodField()
-
-    def get_sks(self, mata_kuliah:models.MataKuliah):
-        return mata_kuliah.jumlah_teori + mata_kuliah.jumlah_pratikum
-        
-    class Meta:
-        model = models.MataKuliah
-        fields = ['kode', 'nama', 'sks']
+        fields = ['kode', 'nama', 'jumlah_sks_teori', 
+                  'jumlah_sks_praktik']
 
 
 class SimpleJadwalMakulSerializer(serializers.ModelSerializer):
@@ -280,6 +319,7 @@ class CreateUpdateJadwalMakulSerializer(serializers.ModelSerializer):
 
 class RuanganSerializer(serializers.ModelSerializer):
     jadwal_pemakaian = SimpleJadwalMakulSerializer(many=True, source='jadwalmakul_set', read_only=True)
+    gedung = GedungKuliahSerializer()
     
     class Meta:
         model = models.Ruangan
@@ -299,11 +339,12 @@ class JadwalMakulSerializer(serializers.ModelSerializer):
     dosen = SimpleDosenSerializer()
     ruangan = SimpleRuanganSerializer()
     mata_kuliah = SimpleMataKuliahSerializer()
+    nama_hari = serializers.CharField(source='get_hari_display',  read_only=True)
     
     class Meta:
         model = models.JadwalMakul
-        fields = ['id', 'hari', 'kode_hari', 'jam_mulai', 
-                  'jam_selesai', 'dosen', 'ruangan', 'mata_kuliah']    
+        fields = ['id', 'hari', 'kode_hari', 'jam_mulai', 'nama_hari',
+                  'jam_selesai', 'dosen', 'ruangan', 'mata_kuliah', 'materi_set']    
 
 
 class JadwalSerializer(serializers.ModelSerializer):
@@ -379,14 +420,25 @@ class KHSSerializer(serializers.ModelSerializer):
     mahasiswa = SimpleMahasiswaSerializer()
     tahun_akademik = serializers.SerializerMethodField()
     nilai_list = NilaiKHSSerializer(many=True)
+    ips = serializers.SerializerMethodField('calculate_ips')
 
     def get_tahun_akademik(self, khs: models.KHS):
         return f'{khs.tahun_akademik_awal} / {khs.tahun_akademik_akhir}'
+    
+    def calculate_ips(self, khs: models.KHS):
+        sum_angka_mutu = 0
+        count_angka_mutu = 0
+        for nilai in khs.nilai_list.all():
+            count_angka_mutu += 1
+            sum_angka_mutu += nilai.angka_mutu
+
+        return round(sum_angka_mutu / count_angka_mutu, 2)
+
     class Meta:
         model = models.KHS
         fields = ['id', 'semester', 'mahasiswa', 'kelas', 
                   'dosen_pembimbing', 'nilai_list', 'program_studi', 
-                  'program_pendidikan', 'tahun_akademik']
+                  'program_pendidikan', 'tahun_akademik', 'ips']
 
 
 class CreateKHSSerializer(serializers.ModelSerializer):
@@ -411,3 +463,8 @@ class CreateKHSSerializer(serializers.ModelSerializer):
         fields = ['id', 'mahasiswa', 'tahun_akademik_awal',
                   'tahun_akademik_akhir']
 
+
+class MateriSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = models.Materi
+        fields = ['id', 'judul', 'deskripsi', 'tanggal_unggah', 'file', 'jadwal_makul']

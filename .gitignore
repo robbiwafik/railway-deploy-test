@@ -6,6 +6,7 @@ __pycache__
 
 # Django
 media/
+/static/
 
 # Database
 *.sqlite3

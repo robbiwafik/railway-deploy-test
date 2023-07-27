@@ -1,4 +1,8 @@
+from datetime import datetime
 from django.db import IntegrityError
+from django.views.generic import View
+from django.http.response import HttpResponse
+from django.shortcuts import render
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -6,6 +10,7 @@ from rest_framework.viewsets import ModelViewSet
 from rest_framework.decorators import action
 
 from . import models, serializers, permissions
+from .utils import print_khs
 
 
 class JurusanViewSet(ModelViewSet):
@@ -95,7 +100,10 @@ class StaffProdiViewSet(ModelViewSet):
     
 
 class DosenViewSet(ModelViewSet):
-    queryset = models.Dosen.objects.select_related('prodi').all()
+    queryset = models.Dosen.objects\
+        .select_related('prodi')\
+        .prefetch_related('makul_ajar__mata_kuliah', 'makul_ajar__ruangan__gedung')\
+        .all()
     lookup_field = 'nip'
     
     def get_serializer_class(self):
@@ -123,7 +131,14 @@ class KelasViewSet(ModelViewSet):
 
 class MahasiswaViewSet(ModelViewSet):
     queryset = models.Mahasiswa.objects\
-        .select_related('pembimbing_akademik', 'kelas', 'kelas__prodi', 'kelas__prodi__jurusan', 'kelas__semester', 'user')\
+        .select_related(
+            'pembimbing_akademik', 
+            'kelas', 
+            'kelas__prodi', 
+            'kelas__prodi__jurusan', 
+            'kelas__semester', 
+            'user',
+        )\
         .all()
     lookup_field = 'nim'
 
@@ -140,22 +155,33 @@ class MahasiswaViewSet(ModelViewSet):
             return Response(serializer.data, status=status.HTTP_200_OK)
                 
     def get_serializer_class(self):
-        if self.request.method in ['POST', 'PUT']:
+        if self.request.method in ['POST', 'PUT', 'PATCH']:
             return serializers.CreateUpdateMahasiswaSerializer
         return serializers.MahasiswaSerializer
     
     def get_permissions(self):
         if self.action == 'me':
             return [permissions.IsMahasiswa()]
+        elif self.request.method in ['PUT', 'PATCH']:
+            return [permissions.IsStaffProdiOrIsMahasiswa()]
         return [permissions.IsStaffProdi()]
     
 
 class RuanganViewSet(ModelViewSet):
     queryset = models.Ruangan.objects\
+        .select_related('gedung')\
         .prefetch_related('jadwalmakul_set', 'jadwalmakul_set__dosen', 'jadwalmakul_set__mata_kuliah',
                           'jadwalmakul_set__jadwal')\
         .all()
     serializer_class = serializers.RuanganSerializer
+
+    def list(self, request, *args, **kwargs):
+        gedung_id = request.GET.get('gedung_id', '')
+        if (not gedung_id):
+            return super().list(request, *args, **kwargs)
+        queryset = self.get_queryset().filter(gedung_id=gedung_id)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(data=serializer.data, status=status.HTTP_200_OK)
 
     def get_permissions(self):
         return [AllowAny()] if self.request.method == 'GET' else [permissions.IsUptTIK()]
@@ -249,6 +275,13 @@ class KaryaIlmiahViewSet(ModelViewSet):
             return [permissions.IsStaffProdi()]
         return [permissions.IsStaffProdiOrIsMahasiswa()]
     
+    # def get_serializer_context(self):
+    #     context = super().get_serializer_context()
+    #     if self.request.method == 'POST':
+    #         context['kode_prodi'] = self.kwargs['kode_prodi']
+    #         context['nim'] = self.kwargs['nim']
+    #     return context
+    
 
 class JadwalViewSet(ModelViewSet):
     def get_queryset(self):
@@ -257,8 +290,15 @@ class JadwalViewSet(ModelViewSet):
         .prefetch_related('makul_list__dosen', 'makul_list__ruangan', 
                           'makul_list__mata_kuliah', 'makul_list__ruangan__gedung')
         kelas_id = self.request.GET.get('kelas_id', None)
-        
-        return queryset.filter(kelas_id=kelas_id) if kelas_id else queryset.all()
+        semesterType = self.request.GET.get('semesterType', None)
+
+        if kelas_id:
+            return queryset.filter(kelas_id=kelas_id)
+        elif semesterType == 'even':
+            return queryset.filter(kelas__semester__in=[2, 4, 6, 8])
+        elif semesterType == 'odd':
+            return queryset.filter(kelas__semester__in=[1, 3, 5, 7])
+        return queryset.all()
     
     def get_serializer_class(self):
         if self.request.method in ['POST', 'PUT']:
@@ -285,6 +325,7 @@ class MataKuliahViewSet(ModelViewSet):
 class JadwalMakulViewSet(ModelViewSet):
     queryset = models.JadwalMakul.objects\
         .select_related('dosen', 'mata_kuliah', 'ruangan__gedung')\
+        .prefetch_related('materi_set')\
         .all()
     serializer_class = serializers.JadwalMakulSerializer
 
@@ -315,6 +356,14 @@ class KHSViewSet(ModelViewSet):
         if self.request.method == 'GET':
             return [permissions.IsStaffProdiOrIsMahasiswa()]
         return [permissions.IsStaffProdi()]
+    
+    def list(self, request, *args, **kwargs):
+        param_value = request.GET.get('nim', '')
+        if not param_value:
+            return super().list(request, *args, **kwargs)
+        queryset = models.KHS.objects.filter(mahasiswa__nim=param_value).all()
+        serializer = serializers.KHSSerializer(queryset, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
     
     def create(self, request, *args, **kwargs):
         serializer = serializers.CreateKHSSerializer(data=request.data)
@@ -365,3 +414,23 @@ class NilaiKHSViewSet(ModelViewSet):
             return [permissions.IsStaffProdiOrIsMahasiswa()]
         return [permissions.IsStaffProdi()]
     
+
+class MateriViewSet(ModelViewSet):
+    queryset = models.Materi.objects.select_related('jadwal_makul').all()
+    serializer_class = serializers.MateriSerializer
+
+    def list(self, request, *args, **kwargs):
+        jadwal_makul_id = self.request.GET.get('jadwal_makul_id')
+        if jadwal_makul_id:
+            queryset = models.Materi.objects.filter(jadwal_makul_id=jadwal_makul_id).order_by('-tanggal_unggah')
+            serializer = serializers.MateriSerializer(queryset, many=True)
+            return Response(data=serializer.data)
+        return super().list(request, *args, **kwargs)
+
+
+class GeneratePdf(View):
+    def get(self, request, *args, **kwargs):
+        model = request.GET.get('model')
+        if (model == 'khs'):
+            khs_id = request.GET.get('khs_id')
+            return print_khs(request, khs_id)

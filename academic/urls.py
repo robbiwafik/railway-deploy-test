@@ -15,6 +15,7 @@ router.register('prodi', views.ProgramStudiViewSet, basename='prodi')
 router.register('program_pendidikan', views.ProgramPendidikanViewSet, basename='program_pendidikan')
 router.register('semester', views.SemesterViewSet, basename='semester')
 router.register('staff_prodi', views.StaffProdiViewSet, basename='staff_prodi')
+router.register('materi', views.MateriViewSet, basename='materi')
 
 router.register('ruangan', views.RuanganViewSet, basename='ruangan')
 ruangan_aduan = routers.NestedSimpleRouter(router, 'ruangan', lookup='ruangan')
@@ -40,5 +41,6 @@ urlpatterns = [
     path('', include(pemberitahuan_prodi.urls)),
     path('', include(pemberitahuan_jurusan.urls)),
     path('', include(jadwal_makul.urls)),
-    path('', include(nilai_khs.urls))
+    path('', include(nilai_khs.urls)),
+    path('generate_pdf', views.GeneratePdf.as_view())
 ]

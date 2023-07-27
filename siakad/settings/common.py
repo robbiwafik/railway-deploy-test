@@ -15,19 +15,11 @@ from pathlib import Path
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SIAKAD_SECRET_KEY')
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = []
 
 
 # Application definition
@@ -42,13 +34,18 @@ INSTALLED_APPS = [
     'rest_framework',
     'djoser',
     'debug_toolbar',
+    'import_export',
+    'mathfilters',
+    'corsheaders',
     'core',
     'academic'
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'debug_toolbar.middleware.DebugToolbarMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -62,7 +59,10 @@ ROOT_URLCONF = 'siakad.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [
+             os.path.join(BASE_DIR, "academic/static"),
+             os.path.join(BASE_DIR, "static"),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -77,19 +77,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'siakad.wsgi.application'
 
-
-# Database
-# https://docs.djangoproject.com/en/4.1/ref/settings/#databases
-
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'siakad',
-        'HOST': '127.0.0.1',
-        'USER': 'root',
-        'PASSWORD': os.environ.get('SIAKAD_DATABASE_PASSWORD')
-    }
-}
 
 
 # Password validation
@@ -126,7 +113,8 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.1/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'static')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
@@ -136,7 +124,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 AUTH_USER_MODEL = 'core.User'
 
 INTERNAL_IPS = [
-    '127.0.0.1'
+    '127.0.0.1',
+    '192.168.236.253'
 ]
 
 MEDIA_URL = 'media/'
@@ -157,3 +146,4 @@ SIMPLE_JWT = {
 
 LANGUAGE_CODE = 'id'
 
+CORS_ALLOW_ALL_ORIGINS = True
