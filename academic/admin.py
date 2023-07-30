@@ -204,6 +204,7 @@ class DosenAdmin(admin.ModelAdmin):
         return super().get_queryset(request)
         
     def changelist_view(self, request: HttpRequest, extra_context: Dict[str, str] | None = ...) -> TemplateResponse:
+        extra_context = {}
         if hasattr(request.user, 'dosen'):
             app_name = self.model._meta.app_label
             model_name = self.model._meta.model_name

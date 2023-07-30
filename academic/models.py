@@ -323,7 +323,7 @@ class JadwalMakul(models.Model):
         return f'{self.jadwal.kelas.prodi} {self.jadwal.kelas.semester} {self.jadwal.kelas.huruf} {self.mata_kuliah.nama}'
     
     class Meta:
-        verbose_name_plural = ''
+        verbose_name_plural = 'Jadwal Makul'
 
 
 class KHS(models.Model):
