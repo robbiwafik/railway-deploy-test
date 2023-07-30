@@ -50,7 +50,7 @@ class PemberitahuanViewSet(ModelViewSet):
     queryset = models.Pemberitahuan.objects\
         .prefetch_related('filter_prodi__prodi', 'filter_jurusan__jurusan')\
         .all()\
-        .order_by('tanggal_terbit')
+        .order_by('-tanggal_terbit')
     
     def get_serializer_class(self, *args, **kwargs):
         if self.action == 'list':
