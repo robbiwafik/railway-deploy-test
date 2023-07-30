@@ -49,7 +49,8 @@ class PemberitahuanViewSet(ModelViewSet):
     http_method_names = ['get', 'patch', 'post', 'delete']
     queryset = models.Pemberitahuan.objects\
         .prefetch_related('filter_prodi__prodi', 'filter_jurusan__jurusan')\
-        .all()
+        .all()\
+        .order_by('tanggal_terbit')
     
     def get_serializer_class(self, *args, **kwargs):
         if self.action == 'list':
